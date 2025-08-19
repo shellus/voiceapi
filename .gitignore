@@ -25,8 +25,5 @@ __pycache__/
 frpc.ini
 
 models/
-silero_vad/
-*.onnx
-*.tar.bz2
-*.tar.gz
 examples/*.wav
+test_audio

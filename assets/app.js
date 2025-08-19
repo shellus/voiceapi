@@ -1,5 +1,6 @@
 const demoapp = {
-    text: '讲个冷笑话吧，要很好笑的那种。',
+    text: '你使用的是正版Windows系统',
+    speakerId: 0, // 默认使用成熟女声
     recording: false,
     asrWS: null,
     currentText: null,
@@ -78,6 +79,14 @@ const demoapp = {
                 currentMessage = '';
                 this.currentText = null
             }
+        };
+
+        ws.onerror = (error) => {
+            console.error('ASR WebSocket error:', error);
+        };
+
+        ws.onclose = (event) => {
+            console.log('ASR WebSocket closed:', event.code, event.reason);
         };
 
         let audioContext = new AudioContext({ sampleRate: 16000 })

@@ -99,6 +99,11 @@ tar -xjf vits-zh-hf-theresa.tar.bz2
 
 更多模型下载方法请参考 [模型下载指南](./MODELS.md)
 
+## 模型音色指南
+
+- [TTS音色选择指南](./docs/models/TTS_VOICES.md) - 详细介绍各TTS模型的音色特点和说话人选择
+- [ASR模型详解](./docs/models/ASR_MODELS.md) - 各ASR模型的特点、精度和使用场景对比
+
 ## API文档
 
 详细的API使用说明请参考 [API文档](./API.md)
