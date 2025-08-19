@@ -1,182 +1,112 @@
-# voiceapi - A simple and clean voice transcription/synthesis API with sherpa-onnx
+# voiceapi - 基于sherpa-onnx的语音转录/合成API
 
-Thanks to [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx), we can easily build a voice API with Python.
+基于 [k2-fsa/sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 构建的简洁语音API服务。
+
 <img src="./screenshot.jpg" width="60%">
 
-## Supported models
-| Model                                  | Language                      | Type        | Description                         |
-| -------------------------------------- | ----------------------------- | ----------- | ----------------------------------- |
-| zipformer-bilingual-zh-en-2023-02-20   | Chinese + English             | Online ASR  | Streaming Zipformer, Bilingual      |
-| sense-voice-zh-en-ja-ko-yue-2024-07-17 | Chinese + English             | Offline ASR | SenseVoice, Bilingual               |
-| paraformer-trilingual-zh-cantonese-en  | Chinese + Cantonese + English | Offline ASR | Paraformer, Trilingual              |
-| paraformer-en-2024-03-09               | English                       | Offline ASR | Paraformer, English                 |
-| vits-zh-hf-theresa                     | Chinese                       | TTS         | VITS, Chinese, 804 speakers         |
-| melo-tts-zh_en                         | Chinese + English             | TTS         | Melo, Chinese + English, 1 speakers |
-| kokoro-multi-lang-v1_0                 | Chinese + English             | TTS         | Chinese + English, 53 speakers      |
+## 项目简介
 
-## Run the app locally
-Python 3.10+ is required
+本项目提供语音识别(ASR)和语音合成(TTS)的WebSocket流式API和HTTP API服务，支持中英文等多语言处理。
 
-```shell
+## 技术选型
+
+- **后端框架**: FastAPI + uvicorn
+- **语音处理**: sherpa-onnx
+- **前端**: 原生HTML/JavaScript
+- **Python版本**: 3.10+
+
+## 主要目录结构
+
+```
+voiceapi/
+├── app.py              # 主应用入口
+├── voiceapi/           # 核心模块
+│   ├── asr.py         # 语音识别模块
+│   └── tts.py         # 语音合成模块
+├── assets/            # 前端资源
+│   ├── index.html     # 演示页面
+│   ├── app.js         # 前端逻辑
+│   └── audio_process.js # 音频处理
+├── examples/          # 示例代码
+└── models/           # 模型文件目录(需下载)
+```
+
+## 快速开始
+
+### 1. 创建虚拟环境
+
+```bash
 python3 -m venv venv
-. venv/bin/activate
-
-pip install -r requirements.txt
-python app.py
+source venv/bin/activate  # Linux/Mac
+# 或 venv\Scripts\activate  # Windows
 ```
 
-Visit `http://localhost:8000/` to see the demo page
+### 2. 安装依赖
 
-## Build cuda image (for Chinese users)
-```shell
-docker build -t voiceapi:cuda_dev -f Dockerfile.cuda.cn .
+```bash
+# 使用虚拟环境的pip安装，避免系统包管理冲突
+./venv/bin/pip install -r requirements.txt -i https://repo.huaweicloud.com/repository/pypi/simple
 ```
 
-## Streaming API (via WebSocket)
-### /asr 
-Send PCM 16bit audio data to the server, and the server will return the transcription result.
-- `samplerate` can be set in the query string, default is 16000. 
+### 3. 下载模型文件
 
-The server will return the transcription result in JSON format, with the following fields:
-- `text`: the transcription result
-- `finished`: whether the segment is finished
-- `idx`: the index of the segment
+项目需要下载模型文件到 `models` 目录，默认使用的模型：
+- ASR模型: `sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20` (中英双语流式)
+- TTS模型: `vits-zh-hf-theresa` (中文，804个说话人)
 
-```javascript
-    const ws = new WebSocket('ws://localhost:8000/asr?samplerate=16000');
-    ws.onopen = () => {
-        console.log('connected');
-        ws.send('{"sid": 0}');
-    };
-    ws.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        const { text, finished, idx } = data;
-        // do something with text
-        // finished is true when the segment is finished
-    };
-    // send audio data
-    // PCM 16bit, with samplerate
-    ws.send(int16Array.buffer);
-```
-### /tts
-Send text to the server, and the server will return the synthesized audio data.
-- `samplerate` can be set in the query string, default is 16000. 
-- `sid` is the Speaker ID, default is 0.
-- `speed` is the speed of the synthesized audio, default is 1.0.
-- `chunk_size` is the size of the audio chunk, default is 1024. 
-
-The server will return the synthesized audio data in binary format.
-- The audio data is in PCM 16bit format, with the binary data in the response body.
-- The server will return the synthesized result with json format, with the following fields:
-    - `elapsed`: the elapsed time
-    - `progress`: the progress of the synthesis
-    - `duration`: the duration of the synthesis
-    - `size`: the size of the synthesized audio data
-
-```javascript
-    const ws = new WebSocket('ws://localhost:8000/tts?samplerate=16000');
-    ws.onopen = () => {
-        console.log('connected');
-        ws.send('Your text here');
-    };
-    ws.onmessage = (e) => {
-        if (e.data instanceof Blob) {
-            // Chunked audio data
-            e.data.arrayBuffer().then((arrayBuffer) => {
-                const int16Array = new Int16Array(arrayBuffer);
-                let float32Array = new Float32Array(int16Array.length);
-                for (let i = 0; i < int16Array.length; i++) {
-                    float32Array[i] = int16Array[i] / 32768.;
-                }
-                playNode.port.postMessage({ message: 'audioData', audioData: float32Array });
-            });
-        } else {
-            // The server will return the synthesized result
-            const {elapsed, progress, duration, size } = JSON.parse(e.data);
-            this.elapsedTime = elapsed;
-        }
-    };
-```
-
-### No Streaming API
-#### /tts 
-Send text to the server, and the server will return the synthesized audio data.
-
-- `text` is the text to be synthesized.
-- `samplerate` can be set in the query string, default is 16000.
-- `sid` is the Speaker ID, default is 0.
-- `speed` is the speed of the synthesized audio, default is 1.0.
-- 
-```shell
-curl -X POST "http://localhost:8000/tts" \
-     -H "Content-Type: application/json" \
-     -d '{
-           "text": "Hello, world!",
-           "sid": 0,
-           "samplerate": 16000
-         }' -o helloworkd.wav
-```
-
-## Download models
-All models are stored in the `models` directory
-Only download the models you need. default models are:
-- asr models: `sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20`(Bilingual, Chinese + English). Streaming
-- tts models: `vits-zh-hf-theresa` (Chinese + English)
-
-### silero_vad.onnx
-> silero is required for ASR
+#### 必需的VAD模型
 ```bash
 mkdir -p silero_vad
 cd silero_vad
-curl -SL -o silero_vad/silero_vad.onnx https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx
+curl -SL -o silero_vad.onnx https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx
+cd ..
 ```
 
-###  FireRedASR-AED-L
+#### 默认ASR模型
 ```bash
-curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-fire-red-asr-large-zh_en-2025-02-16.tar.bz2
-```
-### kokoro-multi-lang-v1_0
-```bash
-curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2
+curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2
+tar -xjf sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2
 ```
 
-### vits-zh-hf-theresa
+#### 默认TTS模型
 ```bash
 curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-hf-theresa.tar.bz2
+tar -xjf vits-zh-hf-theresa.tar.bz2
 ```
 
-### vits-melo-tts-zh_en
+### 4. 运行应用
+
 ```bash
-curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-melo-tts-zh_en.tar.bz2
-```
-### sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20
-```bash 
-curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2
+# 使用虚拟环境的Python运行
+./venv/bin/python app.py --port 8001
 ```
 
-### sherpa-onnx-paraformer-trilingual-zh-cantonese-en
-```bash
-curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-trilingual-zh-cantonese-en.tar.bz2
-```
-### whisper
-```bash
-curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.en.tar.bz2
-```
-### sensevoice
-```bash
-curl -SL -O https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
-```
+访问 `http://localhost:8001/` 查看演示页面
 
-### sherpa-onnx-streaming-paraformer-bilingual-zh-en
-```bash
-curl -SL -O  https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-paraformer-bilingual-zh-en.tar.bz2
-```
+**注意**: 首次运行前必须下载模型文件，否则会出现模型文件不存在的错误。
 
-### sherpa-onnx-paraformer-trilingual-zh-cantonese-en
-```bash
-curl -SL -O  https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-trilingual-zh-cantonese-en.tar.bz2
-```
-### sherpa-onnx-paraformer-en
-```bash
-curl -SL -O  https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-en-2024-03-09.tar.bz2
-```
+## 支持的模型
+
+| 模型名称 | 语言支持 | 类型 | 说明 |
+|---------|---------|------|------|
+| zipformer-bilingual-zh-en-2023-02-20 | 中英文 | 在线ASR | 流式Zipformer双语 |
+| sense-voice-zh-en-ja-ko-yue-2024-07-17 | 中英日韩粤 | 离线ASR | SenseVoice多语言 |
+| paraformer-trilingual-zh-cantonese-en | 中粤英 | 离线ASR | Paraformer三语 |
+| paraformer-en-2024-03-09 | 英文 | 离线ASR | Paraformer英文 |
+| vits-zh-hf-theresa | 中文 | TTS | VITS中文，804说话人 |
+| melo-tts-zh_en | 中英文 | TTS | Melo双语，1说话人 |
+| kokoro-multi-lang-v1_0 | 中英文 | TTS | 多语言，53说话人 |
+
+更多模型下载方法请参考 [模型下载指南](./MODELS.md)
+
+## API文档
+
+详细的API使用说明请参考 [API文档](./API.md)
+
+## 注意事项
+
+- 确保Python版本为3.10或更高
+- 模型文件较大(总计约2GB)，请确保有足够存储空间
+- 如遇到sherpa-onnx版本不兼容，可修改requirements.txt中的版本号
+- 如端口8000被占用，使用`--port`参数指定其他端口
+- 建议使用虚拟环境避免系统包管理冲突
